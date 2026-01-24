@@ -188,65 +188,52 @@ const findJourney = async (req, res) => {
     }
 
     // ===== SIMPLE MODE (Default) =====
-    // Tìm tuyến trực tiếp chứa cả 2 điểm dừng
+    // Tìm tuyến trực tiếp chứa cả 2 điểm dừng với sequence order validation
+    // ⭐ SQL được tối ưu để kiểm tra sequence trực tiếp trong query
     let sql = `
-      SELECT DISTINCT route_id, stop_id, stop_sequence
-      FROM route_stops
-      WHERE stop_id = $1 OR stop_id = $2
-      ORDER BY route_id, stop_sequence
+      SELECT DISTINCT
+        rs1.route_id,
+        rs1.stop_id as origin_stop,
+        rs1.stop_sequence as origin_sequence,
+        rs2.stop_id as destination_stop,
+        rs2.stop_sequence as destination_sequence
+      FROM route_stops rs1
+      INNER JOIN route_stops rs2 
+        ON rs1.route_id = rs2.route_id
+      WHERE rs1.stop_id = $1
+        AND rs2.stop_id = $2
+        AND rs1.stop_sequence < rs2.stop_sequence
+      ORDER BY rs1.route_id
+      LIMIT 10
     `;
-    const result = await pool.query(sql, [origin, destination]);
-    let rows = result.rows;
 
-    // Filter by time_period
+    const params = [origin, destination];
+
+    // Add time_period filter if specified
     if (time_period && TIME_PERIOD_MAP[time_period]) {
       const prefix = TIME_PERIOD_MAP[time_period];
-      rows = rows.filter(row => row.route_id.startsWith(prefix));
+      sql = sql.replace(
+        'ORDER BY rs1.route_id',
+        `AND rs1.route_id LIKE '${prefix}%' ORDER BY rs1.route_id`
+      );
     }
 
-    if (rows.length === 0) {
+    const result = await pool.query(sql, params);
+
+    if (result.rows.length === 0) {
       return res.status(404).json({
-        error: 'Không tìm thấy tuyến chứa cả 2 điểm dừng',
+        error: `Không tìm thấy tuyến nào chứa cả 2 điểm dừng theo thứ tự đúng.
+                Điểm đi phải xuất hiện trước điểm đến trong lộ trình.`,
+        hint: `Kiểm tra: "${origin}" (seq?) → "${destination}" (seq?)`,
         time_period: time_period || 'ALL',
       });
     }
 
-    // Group by route_id
-    const routesMap = {};
-    for (const row of rows) {
-      if (!routesMap[row.route_id]) routesMap[row.route_id] = [];
-      routesMap[row.route_id].push(row);
-    }
-
-    let chosenRouteId = null;
-    let originSeq = null;
-    let destSeq = null;
-
-    // ===== LOGIC SEQUENCE: Tìm tuyến với origin < destination =====
-    for (const [routeId, stops] of Object.entries(routesMap)) {
-      let o = null;
-      let d = null;
-      for (const s of stops) {
-        if (s.stop_id === origin) o = s.stop_sequence;
-        if (s.stop_id === destination) d = s.stop_sequence;
-      }
-
-      // SEQUENCE VALIDATION: origin must come BEFORE destination
-      if (o !== null && d !== null && o < d) {
-        chosenRouteId = routeId;
-        originSeq = o;
-        destSeq = d;
-        break;
-      }
-    }
-
-    if (!chosenRouteId) {
-      return res.status(400).json({
-        error: `Không tìm thấy tuyến hợp lệ: "${origin}" phải xuất hiện TRƯỚC "${destination}" trong lộ trình`,
-        time_period: time_period || 'ALL',
-        available_routes: Object.keys(routesMap),
-      });
-    }
+    // Lấy tuyến đầu tiên (hoặc ngắn nhất)
+    const bestRoute = result.rows[0];
+    const chosenRouteId = bestRoute.route_id;
+    const originSeq = bestRoute.origin_sequence;
+    const destSeq = bestRoute.destination_sequence;
 
     // Fetch full route stops
     const fullResult = await pool.query(

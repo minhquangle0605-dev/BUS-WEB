@@ -244,13 +244,16 @@
         console.log('Trạm gần điểm đến:', nearestEndStop);
 
         // STEP 3: Gọi API Pathfinding để tìm lộ trình giữa 2 trạm
+        // ⭐ Gửi stop_id (không phải tên) để API xử lý chính xác
+        console.log(`🔍 Tìm lộ trình: ${nearestStartStop.stop_id} → ${nearestEndStop.stop_id}`);
+
         const pathResponse = await fetch('http://localhost:3000/routes/find-path', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            from_stop_id: nearestStartStop.stop_id,
-            to_stop_id: nearestEndStop.stop_id,
-            time_period: null  // Tìm tất cả khung giờ
+            from_stop_id: nearestStartStop.stop_id,  // ⭐ stop_id, không phải tên
+            to_stop_id: nearestEndStop.stop_id,      // ⭐ stop_id, không phải tên
+            time_period: null  // Tìm tất cả khung giờ (hoặc "AM" | "MD" | "PM")
           })
         });
 
@@ -258,12 +261,23 @@
           const errorData = await pathResponse.json();
           btn.textContent = 'Tìm tuyến xe buýt';
           btn.disabled = false;
-          alert(`❌ ${errorData.error}\n\n${errorData.hint || ''}`);
+
+          console.error('❌ API Error:', errorData);
+          const errorMsg = `❌ ${errorData.error}\n\n${errorData.hint || ''}`;
+          alert(errorMsg);
           return;
         }
 
         const pathData = await pathResponse.json();
-        console.log('Lộ trình tìm được:', pathData);
+        console.log('✅ Lộ trình tìm được:', pathData);
+
+        // Kiểm tra response có hợp lệ
+        if (!pathData.journey || pathData.journey.length === 0) {
+          btn.textContent = 'Tìm tuyến xe buýt';
+          btn.disabled = false;
+          alert('❌ Không có dữ liệu lộ trình!');
+          return;
+        }
 
         // Khôi phục nút
         btn.textContent = 'Tìm tuyến xe buýt';
