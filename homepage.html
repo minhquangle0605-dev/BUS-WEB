@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <title>Homepage</title>
+
+
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+
+  <link rel="stylesheet" href="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.css" />
+
+  <style>
+    html,
+    body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      font-family: Arial, sans-serif;
+    }
+
+    header {
+      background-color: rgba(23, 233, 23, 0.7);
+      color: white;
+      padding: 10px 16px;
+      font-size: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    header h1 {
+      margin: 0;
+      font-size: 18px;
+    }
+
+    #search-container {
+      min-width: 220px;
+      margin-left: auto;
+    }
+
+    #search-container .leaflet-control-geocoder {
+      margin: 0;
+    }
+
+    #search-container .leaflet-control-geocoder-form input {
+      width: 100%;
+    }
+
+    main {
+      padding: 0;
+      position: relative;
+    }
+
+    /* Chiều cao header + footer ~ 120px -> map dùng phần còn lại */
+    #map {
+      width: 100%;
+      height: calc(100vh - 95px);
+    }
+
+    footer {
+      background-color: rgba(23, 233, 23, 0.7);
+      color: white;
+      padding: 10px 16px;
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      width: 100%;
+      font-size: 15px;
+
+      display: flex;
+      align-items: center;
+    }
+
+    #find-route-btn {
+      padding: 6px 14px;
+      background-color: #007bff;
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+      margin: 0 auto;
+    }
+
+    #find-route-btn:disabled {
+      background-color: #000000;
+      cursor: not-allowed;
+    }
+
+    #logout-btn {
+      padding: 6px 30px;
+      background-color: #dc3545;
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+      margin-left: 0;
+      margin-right: 0;
+    }
+  </style>
+</head>
+
+<body>
+
+  <header>
+    <h1>Find your bus</h1>
+    <div id="search-container"></div>
+  </header>
+
+  <main>
+    <div id="map"></div>
+  </main>
+
+  <footer>
+    <button id="find-route-btn" disabled>Tìm tuyến xe buýt</button>
+    <button id="logout-btn">Đăng xuất</button>
+  </footer>
+
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <script src="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.js"></script>
+
+  <script>
+    // Khởi tạo bản đồ
+    const map = L.map('map').setView([21.0278, 105.8342], 13);
+
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '© OpenStreetMap contributors'
+    }).addTo(map);
+
+    // Các biến lưu trữ
+    let markerA = null;
+    let markerB = null;
+    let busRouteLayer = null;
+    let stopMarkers = [];
+
+    // Xử lý click trên bản đồ
+    map.on('click', function (e) {
+      if (!markerA) {
+        markerA = L.marker(e.latlng, { draggable: true })
+          .addTo(map)
+          .bindPopup('Điểm đi (A)').openPopup();
+      } else if (!markerB) {
+        markerB = L.marker(e.latlng, { draggable: true })
+          .addTo(map)
+          .bindPopup('Điểm đến (B)').openPopup();
+        document.getElementById('find-route-btn').disabled = false;
+      } else {
+        // Reset tất cả
+        map.removeLayer(markerA);
+        map.removeLayer(markerB);
+
+        if (busRouteLayer) {
+          map.removeLayer(busRouteLayer);
+          busRouteLayer = null;
+        }
+
+        // Xóa các marker trạm
+        stopMarkers.forEach(marker => map.removeLayer(marker));
+        stopMarkers = [];
+
+        markerA = markerB = null;
+        document.getElementById('find-route-btn').disabled = true;
+      }
+    });
+
+    // Geocoder (tìm kiếm địa điểm)
+    const geocoderControl = L.Control.geocoder({
+      defaultMarkGeocode: false,
+      placeholder: 'Tìm địa điểm...',
+    });
+
+    geocoderControl.on('markgeocode', function (e) {
+      const latlng = e.geocode.center;
+      map.setView(latlng, 15);
+
+      if (!markerA) {
+        markerA = L.marker(latlng, { draggable: true })
+          .addTo(map)
+          .bindPopup(e.geocode.name)
+          .openPopup();
+      } else {
+        markerA.setLatLng(latlng)
+          .bindPopup(e.geocode.name)
+          .openPopup();
+      }
+    });
+
+    geocoderControl.addTo(map);
+    const geocoderEl = document.querySelector('.leaflet-control-geocoder');
+    document.getElementById('search-container').appendChild(geocoderEl);
+
+    // Xử lý nút "Tìm tuyến xe buýt"
+    document.getElementById('find-route-btn').addEventListener('click', async () => {
+      if (!markerA || !markerB) return;
+
+      const start = markerA.getLatLng();
+      const end = markerB.getLatLng();
+
+      // Xóa route cũ
+      if (busRouteLayer) {
+        map.removeLayer(busRouteLayer);
+      }
+
+      // Xóa các marker trạm cũ
+      stopMarkers.forEach(marker => map.removeLayer(marker));
+      stopMarkers = [];
+
+      try {
+        // Hiển thị loading
+        const btn = document.getElementById('find-route-btn');
+        btn.textContent = 'Đang tìm...';
+        btn.disabled = true;
+
+        // Gọi API để tìm trạm gần điểm xuất phát
+        const startStopsResponse = await fetch(
+          `http://localhost:3000/routes/stops/nearby?lat=${start.lat}&lng=${start.lng}&radius=0.5`
+        );
+        const startStops = await startStopsResponse.json();
+
+        // Gọi API để tìm trạm gần điểm đến
+        const endStopsResponse = await fetch(
+          `http://localhost:3000/routes/stops/nearby?lat=${end.lat}&lng=${end.lng}&radius=0.5`
+        );
+        const endStops = await endStopsResponse.json();
+
+        // Khôi phục nút
+        btn.textContent = 'Tìm tuyến xe buýt';
+        btn.disabled = false;
+
+        // Kiểm tra xem có tìm thấy trạm không
+        if (startStops.length === 0 || endStops.length === 0) {
+          alert('Không tìm thấy trạm xe buýt gần vị trí bạn chọn.\nVui lòng chọn vị trí khác hoặc tăng bán kính tìm kiếm.');
+          return;
+        }
+
+        // Lấy trạm gần nhất
+        const nearestStartStop = startStops[0];
+        const nearestEndStop = endStops[0];
+
+        console.log('Trạm gần điểm xuất phát:', nearestStartStop);
+        console.log('Trạm gần điểm đến:', nearestEndStop);
+
+        // Vẽ đường từ điểm A -> trạm xuất phát -> trạm đến -> điểm B
+        busRouteLayer = L.polyline([
+          start,
+          [nearestStartStop.stop_lat, nearestStartStop.stop_lon],
+          [nearestEndStop.stop_lat, nearestEndStop.stop_lon],
+          end
+        ], {
+          color: 'blue',
+          weight: 4,
+          opacity: 0.7
+        }).addTo(map);
+
+        // Thêm marker cho trạm xuất phát
+        const startStopMarker = L.circleMarker(
+          [nearestStartStop.stop_lat, nearestStartStop.stop_lon],
+          {
+            color: 'green',
+            fillColor: '#90EE90',
+            fillOpacity: 0.8,
+            radius: 10
+          }
+        ).addTo(map).bindPopup(`
+                <b>Trạm xuất phát</b><br>
+                ${nearestStartStop.stop_name}<br>
+                <small>Cách bạn: ${Math.round(nearestStartStop.distance * 1000)}m</small>
+            `);
+
+        // Thêm marker cho trạm đến
+        const endStopMarker = L.circleMarker(
+          [nearestEndStop.stop_lat, nearestEndStop.stop_lon],
+          {
+            color: 'red',
+            fillColor: '#FFB6C1',
+            fillOpacity: 0.8,
+            radius: 10
+          }
+        ).addTo(map).bindPopup(`
+                <b>Trạm đến</b><br>
+                ${nearestEndStop.stop_name}<br>
+                <small>Cách điểm đến: ${Math.round(nearestEndStop.distance * 1000)}m</small>
+            `);
+
+        stopMarkers.push(startStopMarker, endStopMarker);
+
+        // Hiển thị thông báo
+        alert(`✅ Tìm thấy tuyến!\n\n📍 Trạm xuất phát: ${nearestStartStop.stop_name}\n   (Cách bạn ${Math.round(nearestStartStop.distance * 1000)}m)\n\n📍 Trạm đến: ${nearestEndStop.stop_name}\n   (Cách điểm đến ${Math.round(nearestEndStop.distance * 1000)}m)`);
+
+        // Zoom vào khu vực
+        map.fitBounds(busRouteLayer.getBounds(), { padding: [50, 50] });
+
+      } catch (error) {
+        console.error('Lỗi khi gọi API:', error);
+
+        // Khôi phục nút
+        const btn = document.getElementById('find-route-btn');
+        btn.textContent = 'Tìm tuyến xe buýt';
+        btn.disabled = false;
+
+        alert('❌ Lỗi kết nối đến server!\n\nVui lòng kiểm tra:\n1. Server có đang chạy không? (npm start)\n2. URL: http://localhost:3000\n3. Kiểm tra Console để xem lỗi chi tiết (F12)');
+      }
+    });
+
+    // Xử lý nút đăng xuất
+    document.getElementById('logout-btn').addEventListener('click', () => {
+      if (confirm('Bạn có chắc muốn đăng xuất?')) {
+        localStorage.removeItem('loggedInUser');
+        window.location.href = 'index.html';
+      }
+    });
+  </script>
+
+</body>
+
+</html>
