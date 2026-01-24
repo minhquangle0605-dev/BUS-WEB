@@ -217,94 +217,133 @@
         btn.textContent = 'Đang tìm...';
         btn.disabled = true;
 
-        // Gọi API để tìm trạm gần điểm xuất phát
+        // STEP 1: Tìm trạm gần điểm xuất phát
         const startStopsResponse = await fetch(
-          `http://localhost:3000/routes/stops/nearby?lat=${start.lat}&lng=${start.lng}&radius=0.5`
+          `http://localhost:3000/stops/nearby?lat=${start.lat}&lng=${start.lng}&radius=0.5`
         );
         const startStops = await startStopsResponse.json();
 
-        // Gọi API để tìm trạm gần điểm đến
+        // STEP 2: Tìm trạm gần điểm đến
         const endStopsResponse = await fetch(
-          `http://localhost:3000/routes/stops/nearby?lat=${end.lat}&lng=${end.lng}&radius=0.5`
+          `http://localhost:3000/stops/nearby?lat=${end.lat}&lng=${end.lng}&radius=0.5`
         );
         const endStops = await endStopsResponse.json();
 
-        // Khôi phục nút
-        btn.textContent = 'Tìm tuyến xe buýt';
-        btn.disabled = false;
-
         // Kiểm tra xem có tìm thấy trạm không
         if (startStops.length === 0 || endStops.length === 0) {
-          alert('Không tìm thấy trạm xe buýt gần vị trí bạn chọn.\nVui lòng chọn vị trí khác hoặc tăng bán kính tìm kiếm.');
+          btn.textContent = 'Tìm tuyến xe buýt';
+          btn.disabled = false;
+          alert('❌ Không tìm thấy trạm xe buýt gần vị trí bạn chọn.\nVui lòng chọn vị trí khác hoặc tăng bán kính tìm kiếm.');
           return;
         }
 
-        // Lấy trạm gần nhất
         const nearestStartStop = startStops[0];
         const nearestEndStop = endStops[0];
 
         console.log('Trạm gần điểm xuất phát:', nearestStartStop);
         console.log('Trạm gần điểm đến:', nearestEndStop);
 
-        // Vẽ đường từ điểm A -> trạm xuất phát -> trạm đến -> điểm B
-        busRouteLayer = L.polyline([
-          start,
-          [nearestStartStop.stop_lat, nearestStartStop.stop_lon],
-          [nearestEndStop.stop_lat, nearestEndStop.stop_lon],
-          end
-        ], {
-          color: 'blue',
-          weight: 4,
-          opacity: 0.7
-        }).addTo(map);
+        // STEP 3: Gọi API Pathfinding để tìm lộ trình giữa 2 trạm
+        const pathResponse = await fetch('http://localhost:3000/routes/find-path', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            from_stop_id: nearestStartStop.stop_id,
+            to_stop_id: nearestEndStop.stop_id,
+            time_period: null  // Tìm tất cả khung giờ
+          })
+        });
 
-        // Thêm marker cho trạm xuất phát
-        const startStopMarker = L.circleMarker(
-          [nearestStartStop.stop_lat, nearestStartStop.stop_lon],
-          {
-            color: 'green',
-            fillColor: '#90EE90',
-            fillOpacity: 0.8,
-            radius: 10
-          }
-        ).addTo(map).bindPopup(`
-                <b>Trạm xuất phát</b><br>
-                ${nearestStartStop.stop_name}<br>
-                <small>Cách bạn: ${Math.round(nearestStartStop.distance * 1000)}m</small>
+        if (!pathResponse.ok) {
+          const errorData = await pathResponse.json();
+          btn.textContent = 'Tìm tuyến xe buýt';
+          btn.disabled = false;
+          alert(`❌ ${errorData.error}\n\n${errorData.hint || ''}`);
+          return;
+        }
+
+        const pathData = await pathResponse.json();
+        console.log('Lộ trình tìm được:', pathData);
+
+        // Khôi phục nút
+        btn.textContent = 'Tìm tuyến xe buýt';
+        btn.disabled = false;
+
+        // STEP 4: Vẽ lộ trình trên bản đồ
+        if (pathData.journey && pathData.journey.length > 0) {
+          // Tạo đường đi từ tất cả trạm
+          const routePoints = pathData.journey.map(stop => [stop.stop_lat, stop.stop_lon]);
+
+          busRouteLayer = L.polyline([
+            start,
+            ...routePoints,
+            end
+          ], {
+            color: '#007bff',
+            weight: 4,
+            opacity: 0.8
+          }).addTo(map);
+
+          // Vẽ marker cho tất cả trạm
+          pathData.journey.forEach((stop, index) => {
+            let color = '#90EE90';
+            let label = '';
+
+            if (index === 0) {
+              color = 'green';
+              label = '🟢 Trạm xuất phát';
+            } else if (index === pathData.journey.length - 1) {
+              color = 'red';
+              label = '🔴 Trạm đến';
+            } else {
+              color = 'blue';
+              label = `⚫ Trạm ${index}`;
+            }
+
+            const stopMarker = L.circleMarker(
+              [stop.stop_lat, stop.stop_lon],
+              {
+                color: color === 'green' ? 'darkgreen' : color === 'red' ? 'darkred' : 'darkblue',
+                fillColor: color,
+                fillOpacity: 0.8,
+                radius: 8
+              }
+            ).addTo(map).bindPopup(`
+              <b>${label}</b><br>
+              <strong>${stop.stop_name}</strong><br>
+              <small>Vị trí: ${stop.stop_id}</small><br>
+              <small>Trình tự: #${stop.sequence}</small>
             `);
 
-        // Thêm marker cho trạm đến
-        const endStopMarker = L.circleMarker(
-          [nearestEndStop.stop_lat, nearestEndStop.stop_lon],
-          {
-            color: 'red',
-            fillColor: '#FFB6C1',
-            fillOpacity: 0.8,
-            radius: 10
-          }
-        ).addTo(map).bindPopup(`
-                <b>Trạm đến</b><br>
-                ${nearestEndStop.stop_name}<br>
-                <small>Cách điểm đến: ${Math.round(nearestEndStop.distance * 1000)}m</small>
-            `);
+            stopMarkers.push(stopMarker);
+          });
 
-        stopMarkers.push(startStopMarker, endStopMarker);
+          // Hiển thị thông báo thành công
+          const distance = pathData.distance_stops;
+          alert(`✅ Tìm thấy tuyến xe buýt!\n\n` +
+            `🚌 Tuyến: ${pathData.route.route_short_name} - ${pathData.route.route_long_name}\n` +
+            `📍 Từ: ${pathData.from.stop_name}\n` +
+            `📍 Đến: ${pathData.to.stop_name}\n` +
+            `🛑 Tổng trạm: ${pathData.total_stops}\n` +
+            `📏 Số đoạn: ${distance}`);
 
-        // Hiển thị thông báo
-        alert(`✅ Tìm thấy tuyến!\n\n📍 Trạm xuất phát: ${nearestStartStop.stop_name}\n   (Cách bạn ${Math.round(nearestStartStop.distance * 1000)}m)\n\n📍 Trạm đến: ${nearestEndStop.stop_name}\n   (Cách điểm đến ${Math.round(nearestEndStop.distance * 1000)}m)`);
-
-        // Zoom vào khu vực
-        map.fitBounds(busRouteLayer.getBounds(), { padding: [50, 50] });
+          // Zoom vào khu vực
+          map.fitBounds(busRouteLayer.getBounds(), { padding: [50, 50] });
+        }
 
       } catch (error) {
-        console.error('Lỗi khi gọi API:', error);
+        console.error('❌ Lỗi khi gọi API:', error);
 
         // Khôi phục nút
         const btn = document.getElementById('find-route-btn');
         btn.textContent = 'Tìm tuyến xe buýt';
         btn.disabled = false;
 
-        alert('❌ Lỗi kết nối đến server!\n\nVui lòng kiểm tra:\n1. Server có đang chạy không? (npm start)\n2. URL: http://localhost:3000\n3. Kiểm tra Console để xem lỗi chi tiết (F12)');
+        alert('❌ Lỗi kết nối đến server!\n\nVui lòng kiểm tra:\n' +
+          '1. Server có đang chạy không? (npm start)\n' +
+          '2. URL: http://localhost:3000\n' +
+          '3. Kiểm tra Console để xem lỗi chi tiết (F12)\n\n' +
+          `Lỗi: ${error.message}`);
       }
     });
 

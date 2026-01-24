@@ -308,7 +308,172 @@ const findJourney = async (req, res) => {
   }
 };
 
+// ============ POST /routes/find-path ============
+/**
+ * PATHFINDING API: Tìm lộ trình từ điểm A đến điểm B
+ * 
+ * Logic:
+ * 1. Tìm tất cả tuyến đi qua điểm A
+ * 2. Tìm tất cả tuyến đi qua điểm B
+ * 3. Tìm tuyến giao nhau (chứa cả A và B)
+ * 4. Kiểm tra sequence: A.sequence < B.sequence (không đi ngược)
+ * 5. Trả về chi tiết lộ trình với tất cả điểm dừng giữa A và B
+ */
+const findPath = async (req, res) => {
+  try {
+    const { from_stop_id, to_stop_id, time_period } = req.body;
+
+    // Validate input
+    if (!from_stop_id || !to_stop_id) {
+      return res.status(400).json({
+        error: 'from_stop_id và to_stop_id là bắt buộc',
+        example: { from_stop_id: 'S1', to_stop_id: 'S5', time_period: 'AM' },
+      });
+    }
+
+    if (from_stop_id === to_stop_id) {
+      return res.status(400).json({
+        error: 'from_stop_id và to_stop_id phải khác nhau',
+      });
+    }
+
+    // Verify stops exist
+    const stopsCheck = await pool.query(
+      `SELECT stop_id, stop_name, stop_lat, stop_lon 
+       FROM stops 
+       WHERE stop_id IN ($1, $2)`,
+      [from_stop_id, to_stop_id]
+    );
+
+    if (stopsCheck.rows.length !== 2) {
+      return res.status(404).json({
+        error: 'Một hoặc cả 2 điểm dừng không tồn tại',
+      });
+    }
+
+    const stopMap = {};
+    stopsCheck.rows.forEach(row => {
+      stopMap[row.stop_id] = row;
+    });
+
+    // ===== PATHFINDING LOGIC =====
+    // Tìm tuyến đi qua cả 2 điểm dừng (sequence A < sequence B)
+    let timeFilter = '';
+    const params = [from_stop_id, to_stop_id];
+
+    if (time_period && TIME_PERIOD_MAP[time_period]) {
+      const prefix = TIME_PERIOD_MAP[time_period];
+      timeFilter = ` AND rs.route_id LIKE $3 || '%'`;
+      params.push(prefix);
+    }
+
+    const pathSQL = `
+      SELECT DISTINCT
+        rs1.route_id,
+        rs1.stop_id as from_stop,
+        rs1.stop_sequence as from_sequence,
+        rs2.stop_id as to_stop,
+        rs2.stop_sequence as to_sequence
+      FROM route_stops rs1
+      INNER JOIN route_stops rs2 ON rs1.route_id = rs2.route_id
+      WHERE rs1.stop_id = $1
+        AND rs2.stop_id = $2
+        AND rs1.stop_sequence < rs2.stop_sequence
+        ${timeFilter}
+      LIMIT 10
+    `;
+
+    const pathResult = await pool.query(pathSQL, params);
+
+    if (pathResult.rows.length === 0) {
+      return res.status(404).json({
+        error: 'Không tìm thấy tuyến nào đi qua cả 2 điểm này theo thứ tự đúng',
+        hint: 'Điểm đi phải xuất hiện trước điểm đến trong lộ trình',
+        time_period: time_period || 'ALL',
+      });
+    }
+
+    // Lấy tuyến đầu tiên (hoặc có thể chọn tuyến ngắn nhất)
+    const bestRoute = pathResult.rows[0];
+    const routeId = bestRoute.route_id;
+    const fromSeq = bestRoute.from_sequence;
+    const toSeq = bestRoute.to_sequence;
+
+    // Lấy thông tin tuyến
+    const routeInfo = await pool.query(
+      `SELECT route_id, route_short_name, route_long_name 
+       FROM routes 
+       WHERE route_id = $1`,
+      [routeId]
+    );
+
+    // Lấy tất cả điểm dừng trên tuyến từ A đến B
+    const stopsOnRoute = await pool.query(
+      `SELECT stop_id, stop_sequence
+       FROM route_stops
+       WHERE route_id = $1 AND stop_sequence >= $2 AND stop_sequence <= $3
+       ORDER BY stop_sequence ASC`,
+      [routeId, fromSeq, toSeq]
+    );
+
+    // Lấy chi tiết tất cả điểm dừng
+    const stopIds = stopsOnRoute.rows.map(s => s.stop_id);
+    const stopsDetail = await pool.query(
+      `SELECT stop_id, stop_name, stop_lat, stop_lon
+       FROM stops
+       WHERE stop_id = ANY($1)
+       ORDER BY stop_id`,
+      [stopIds]
+    );
+
+    const stopDetailMap = {};
+    stopsDetail.rows.forEach(s => {
+      stopDetailMap[s.stop_id] = s;
+    });
+
+    // Xây dựng lộ trình chi tiết
+    const journey = stopsOnRoute.rows.map(s => ({
+      ...stopDetailMap[s.stop_id],
+      sequence: s.stop_sequence,
+    }));
+
+    return res.json({
+      success: true,
+      route: {
+        route_id: routeInfo.rows[0]?.route_id,
+        route_short_name: routeInfo.rows[0]?.route_short_name,
+        route_long_name: routeInfo.rows[0]?.route_long_name,
+      },
+      from: {
+        stop_id: from_stop_id,
+        stop_name: stopMap[from_stop_id].stop_name,
+        stop_lat: stopMap[from_stop_id].stop_lat,
+        stop_lon: stopMap[from_stop_id].stop_lon,
+        sequence: fromSeq,
+      },
+      to: {
+        stop_id: to_stop_id,
+        stop_name: stopMap[to_stop_id].stop_name,
+        stop_lat: stopMap[to_stop_id].stop_lat,
+        stop_lon: stopMap[to_stop_id].stop_lon,
+        sequence: toSeq,
+      },
+      total_stops: journey.length,
+      distance_stops: journey.length - 1,
+      time_period: time_period || 'ALL',
+      journey,
+    });
+  } catch (err) {
+    console.error('findPath error:', err);
+    return res.status(500).json({
+      error: 'Server error',
+      details: err.message,
+    });
+  }
+};
+
 module.exports = {
   getStatus,
   findJourney,
+  findPath,
 };
