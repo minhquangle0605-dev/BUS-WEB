@@ -13,10 +13,12 @@ const pool = new Pool({
 pool
   .query('SELECT 1')
   .then(() => {
-    console.log('DB connected');
+    console.log('✅ DB connected');
   })
   .catch((err) => {
-    console.error('DB connection error:', err.message);
+    console.error('❌ DB connection error:', err.message);
   });
+
+module.exports = pool;
 
 module.exports = pool;

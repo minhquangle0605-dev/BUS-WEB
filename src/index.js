@@ -22,7 +22,7 @@ app.get('/', (req, res) => {
     message: 'Server OK',
     endpoints: {
       stops: 'GET /stops, GET /stops?q=name, GET /stops/:id, GET /stops/nearby?lat=&lng=&radius=',
-      routes: 'GET /routes/status, POST /routes/find-path',
+      routes: 'GET /routes/status, POST /routes/journey',
     },
   });
 });
