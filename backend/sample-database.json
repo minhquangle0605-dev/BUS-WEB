@@ -1,0 +1,284 @@
+{
+  "info": {
+    "name": "bus_route_db",
+    "description": "Sample MongoDB database for Bus Route Finder",
+    "version": "1.0",
+    "usage": "Import using: mongoimport --db bus_route_db --collection <collection_name> --file sample-database.json --jsonArray"
+  },
+  
+  "users": [
+    {
+      "_id": "user_sample_001",
+      "email": "nguyenvana@example.com",
+      "password": "$2a$10$XQQ7YXKxnfRqJYnKZ4XQb.xYZZYQZZYQZZYQZZYQZZYQZZYQZZ",
+      "fullName": "Nguyễn Văn A",
+      "phoneNumber": "0912345678",
+      "dateOfBirth": "1995-05-15T00:00:00.000Z",
+      "address": {
+        "street": "123 Phố Huế",
+        "ward": "Minh Khai",
+        "district": "Hai Bà Trưng",
+        "city": "Hà Nội"
+      },
+      "avatar": "https://via.placeholder.com/150",
+      "balance": 150000,
+      "favoriteRoutes": [],
+      "isActive": true,
+      "createdAt": "2025-01-01T00:00:00.000Z",
+      "updatedAt": "2025-01-20T00:00:00.000Z"
+    },
+    {
+      "_id": "user_sample_002",
+      "email": "tranthib@example.com",
+      "password": "$2a$10$XQQ7YXKxnfRqJYnKZ4XQb.xYZZYQZZYQZZYQZZYQZZYQZZYQZZ",
+      "fullName": "Trần Thị B",
+      "phoneNumber": "0987654321",
+      "dateOfBirth": "1960-03-20T00:00:00.000Z",
+      "address": {
+        "street": "456 Giải Phóng",
+        "ward": "Thanh Xuân Bắc",
+        "district": "Thanh Xuân",
+        "city": "Hà Nội"
+      },
+      "avatar": "https://via.placeholder.com/150",
+      "balance": 50000,
+      "favoriteRoutes": [],
+      "isActive": true,
+      "createdAt": "2025-01-10T00:00:00.000Z",
+      "updatedAt": "2025-01-20T00:00:00.000Z",
+      "__comment": "User này >60 tuổi, được miễn phí vé"
+    }
+  ],
+
+  "busstops": [
+    {
+      "_id": "stop_001",
+      "name": "Bến xe Mỹ Đình",
+      "stopCode": "MD001",
+      "address": {
+        "street": "Phạm Hùng",
+        "ward": "Mỹ Đình 1",
+        "district": "Nam Từ Liêm",
+        "city": "Hà Nội"
+      },
+      "location": {
+        "type": "Point",
+        "coordinates": [105.7803, 21.0278]
+      },
+      "routes": ["route_001", "route_002"],
+      "facilities": {
+        "hasShelter": true,
+        "hasBench": true,
+        "hasLighting": true,
+        "hasTrashBin": true
+      },
+      "ticketOffice": {
+        "available": true,
+        "openingHours": {
+          "weekday": "05:00 - 22:00",
+          "weekend": "05:30 - 21:30"
+        },
+        "phoneNumber": "024-1234-5678",
+        "services": ["Bán vé", "Nạp thẻ", "Tư vấn tuyến đường", "Hỗ trợ người cao tuổi"]
+      },
+      "isActive": true,
+      "createdAt": "2025-01-01T00:00:00.000Z"
+    },
+    {
+      "_id": "stop_002",
+      "name": "Bến xe Giáp Bát",
+      "stopCode": "GB001",
+      "address": {
+        "street": "Giải Phóng",
+        "ward": "Giáp Bát",
+        "district": "Hoàng Mai",
+        "city": "Hà Nội"
+      },
+      "location": {
+        "type": "Point",
+        "coordinates": [105.8405, 20.9817]
+      },
+      "routes": ["route_002"],
+      "facilities": {
+        "hasShelter": true,
+        "hasBench": true,
+        "hasLighting": true,
+        "hasTrashBin": true
+      },
+      "ticketOffice": {
+        "available": true,
+        "openingHours": {
+          "weekday": "05:00 - 22:30",
+          "weekend": "05:30 - 22:00"
+        },
+        "phoneNumber": "024-1234-5679",
+        "services": ["Bán vé", "Nạp thẻ", "Tư vấn tuyến đường"]
+      },
+      "isActive": true,
+      "createdAt": "2025-01-01T00:00:00.000Z"
+    },
+    {
+      "_id": "stop_003",
+      "name": "Hồ Gươm",
+      "stopCode": "HG001",
+      "address": {
+        "street": "Lê Thái Tổ",
+        "ward": "Hàng Trống",
+        "district": "Hoàn Kiếm",
+        "city": "Hà Nội"
+      },
+      "location": {
+        "type": "Point",
+        "coordinates": [105.8525, 21.0285]
+      },
+      "routes": ["route_002"],
+      "facilities": {
+        "hasShelter": false,
+        "hasBench": true,
+        "hasLighting": true,
+        "hasTrashBin": true
+      },
+      "ticketOffice": {
+        "available": false
+      },
+      "isActive": true,
+      "createdAt": "2025-01-01T00:00:00.000Z"
+    }
+  ],
+
+  "busroutes": [
+    {
+      "_id": "route_001",
+      "routeNumber": "01",
+      "routeName": "Bến xe Yên Nghĩa - Bến xe Mỹ Đình",
+      "description": "Tuyến chạy từ Hà Đông đến Nam Từ Liêm",
+      "startPoint": {
+        "name": "Bến xe Yên Nghĩa",
+        "location": {
+          "type": "Point",
+          "coordinates": [105.7436, 20.9613]
+        }
+      },
+      "endPoint": {
+        "name": "Bến xe Mỹ Đình",
+        "location": {
+          "type": "Point",
+          "coordinates": [105.7803, 21.0278]
+        }
+      },
+      "busStops": ["stop_001"],
+      "pricing": {
+        "regularPrice": 7000,
+        "studentPrice": 5000,
+        "seniorPrice": 3500
+      },
+      "operatingHours": {
+        "weekday": {
+          "start": "05:00",
+          "end": "22:00",
+          "frequency": 15
+        },
+        "weekend": {
+          "start": "05:30",
+          "end": "21:30",
+          "frequency": 20
+        }
+      },
+      "distance": 18.5,
+      "estimatedDuration": 50,
+      "isActive": true,
+      "color": "#e74c3c",
+      "totalTrips": 0,
+      "favoriteCount": 0,
+      "createdAt": "2025-01-01T00:00:00.000Z",
+      "updatedAt": "2025-01-01T00:00:00.000Z"
+    },
+    {
+      "_id": "route_002",
+      "routeNumber": "03",
+      "routeName": "Bến xe Mỹ Đình - Bến xe Giáp Bát",
+      "description": "Tuyến chạy ngang qua trung tâm Hà Nội",
+      "startPoint": {
+        "name": "Bến xe Mỹ Đình",
+        "location": {
+          "type": "Point",
+          "coordinates": [105.7803, 21.0278]
+        }
+      },
+      "endPoint": {
+        "name": "Bến xe Giáp Bát",
+        "location": {
+          "type": "Point",
+          "coordinates": [105.8405, 20.9817]
+        }
+      },
+      "busStops": ["stop_001", "stop_003", "stop_002"],
+      "pricing": {
+        "regularPrice": 7000,
+        "studentPrice": 5000,
+        "seniorPrice": 3500
+      },
+      "operatingHours": {
+        "weekday": {
+          "start": "05:00",
+          "end": "22:30",
+          "frequency": 12
+        },
+        "weekend": {
+          "start": "05:30",
+          "end": "22:00",
+          "frequency": 15
+        }
+      },
+      "distance": 22.3,
+      "estimatedDuration": 65,
+      "isActive": true,
+      "color": "#3498db",
+      "totalTrips": 0,
+      "favoriteCount": 0,
+      "createdAt": "2025-01-01T00:00:00.000Z",
+      "updatedAt": "2025-01-01T00:00:00.000Z"
+    }
+  ],
+
+  "tickets": [
+    {
+      "_id": "ticket_001",
+      "user": "user_sample_001",
+      "route": "route_002",
+      "ticketCode": "BUS17379864001ABC",
+      "qrCode": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+      "ticketType": "single",
+      "passengerType": "regular",
+      "price": 7000,
+      "boardingStop": "stop_001",
+      "alightingStop": "stop_002",
+      "validFrom": "2025-01-20T08:00:00.000Z",
+      "validUntil": "2025-01-20T10:00:00.000Z",
+      "status": "active",
+      "paymentMethod": "balance",
+      "paymentStatus": "completed",
+      "createdAt": "2025-01-20T08:00:00.000Z",
+      "__comment": "Vé lượt cho Nguyễn Văn A"
+    },
+    {
+      "_id": "ticket_002",
+      "user": "user_sample_002",
+      "route": "route_002",
+      "ticketCode": "BUS17379864002XYZ",
+      "qrCode": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+      "ticketType": "single",
+      "passengerType": "regular",
+      "price": 0,
+      "boardingStop": "stop_001",
+      "alightingStop": "stop_002",
+      "validFrom": "2025-01-20T09:00:00.000Z",
+      "validUntil": "2025-01-20T11:00:00.000Z",
+      "status": "active",
+      "paymentMethod": "balance",
+      "paymentStatus": "completed",
+      "createdAt": "2025-01-20T09:00:00.000Z",
+      "__comment": "Vé MIỄN PHÍ cho Trần Thị B (>60 tuổi)"
+    }
+  ]
+}
